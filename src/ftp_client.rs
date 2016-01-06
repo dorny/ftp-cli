@@ -71,6 +71,7 @@ impl FtpClient {
         }
     }
 
+    /// Delete file on server
     pub fn delete (&mut self, path: &str) -> Result<(), FtpError> {
         let cmd = FtpCommand::DELE(path);
         try!(self.write_command(cmd));
@@ -83,13 +84,14 @@ impl FtpClient {
     /// Download remote file to current local directory.
     pub fn get(&mut self, remote_path: &str, local_path: &str) -> Result<(), FtpError> {
         let cmd = FtpCommand::RETR(remote_path);
-        let mut stream = try!(self.init_data_transfer(cmd));
+        let mut stream = try!(self.init_data_transfer(cmd, FtpTransferType::Binary));
         let mut file = try!(File::create(local_path));
         try!(stream.write_all_to(&mut file));
         try!(self.end_data_transfer());
         Ok(())
     }
 
+    /// Make directory on server
     pub fn mkdir(&mut self, path: &str) -> Result<(), FtpError> {
         let cmd = FtpCommand::MKD(path);
         try!(self.write_command(cmd));
@@ -102,7 +104,7 @@ impl FtpClient {
     /// List remote directory.
     pub fn list(&mut self, path: &str) -> Result<String, FtpError> {
         let cmd = FtpCommand::LIST(path);
-        let mut stream = try!(self.init_data_transfer(cmd));
+        let mut stream = try!(self.init_data_transfer(cmd, FtpTransferType::Text));
         let mut buf :Vec<u8> = Vec::new();
         try!(stream.read_to_end(&mut buf));
         let text = try!(String::from_utf8(buf));
@@ -113,14 +115,14 @@ impl FtpClient {
     /// Upload local file to server current directory.
     pub fn put(&mut self, local_path: &str, remote_path: &str) -> Result<(), FtpError> {
         let cmd = FtpCommand::STOR(remote_path);
-        let mut stream = try!(self.init_data_transfer(cmd));
+        let mut stream = try!(self.init_data_transfer(cmd, FtpTransferType::Binary));
         let mut file = try!(File::open(local_path));
         try!(file.write_all_to(&mut stream));
         try!(self.end_data_transfer());
         Ok(())
     }
 
-    /// Get current working directory.
+    /// Get current working directory on server.
     pub fn pwd(&mut self) -> Result<String, FtpError> {
         let cmd = FtpCommand::PWD;
         try!(self.write_command(cmd));
@@ -130,6 +132,7 @@ impl FtpClient {
         }
     }
 
+    /// Send QUIT command to server and close connection (dropping FtpClient).
     pub fn quit(mut self) {
         let cmd = FtpCommand::QUIT;
         match self.write_command(cmd) {
@@ -137,6 +140,7 @@ impl FtpClient {
         }
     }
 
+    /// Remove directory
     pub fn rmdir(&mut self, path: &str) -> Result<(), FtpError> {
         let cmd = FtpCommand::RMD(path);
         try!(self.write_command(cmd));
@@ -150,7 +154,6 @@ impl FtpClient {
     fn read_response(&mut self) -> Result<(i32, String), FtpError> {
         let mut line = String::new();
         try!(self.cmd_stream.read_line(&mut line));
-        //println!("received response: {:?}", line);
         let pos = match line.find(' ') {
             Some(pos) => pos,
             None => return Err(FtpError::InvalidResponse(line))
@@ -162,12 +165,18 @@ impl FtpClient {
         };
 
         let text = line[pos+1..].trim().to_string();
-
         Ok((code, text))
     }
 
     /// Init data transfer and returns stream.
-    fn init_data_transfer(&mut self, command: FtpCommand) -> Result<TcpStream, FtpError> {
+    fn init_data_transfer(&mut self, command: FtpCommand, transfer: FtpTransferType) -> Result<TcpStream, FtpError> {
+        let cmd = FtpCommand::TYPE(transfer);
+        try!(self.write_command(cmd));
+        match self.read_response() {
+            Ok((status::SUCCESS,_)) => { }
+            other => return Err(to_error(other))
+        };
+
         match self.mode {
             FtpMode::Active(addr) => self.init_data_transfer_active(command, addr),
             FtpMode::Passive => self.init_data_transfer_passive(command)
@@ -177,7 +186,6 @@ impl FtpClient {
     /// Init data transfer for active mode
     fn init_data_transfer_active(&mut self, command: FtpCommand, addr: SocketAddrV4) -> Result<TcpStream, FtpError> {
         let listener = try!(TcpListener::bind(addr));
-        //try!(self.write_command(format!("{} {}\n", commands::PORT, to_ftp_addr(addr))));
         try!(self.write_command(FtpCommand::PORT(addr)));
         match self.read_response() {
             Ok((status::SUCCESS,_)) => {
@@ -186,10 +194,10 @@ impl FtpClient {
                     Ok((status::OPEN_DATA_CONNECTION,_)) => {
                         let (stream, _) = try!(listener.accept());
                         Ok(stream)
-                    },
+                    }
                     other => Err(to_error(other))
                 }
-            },
+            }
             other => Err(to_error(other))
         }
     }
@@ -212,7 +220,7 @@ impl FtpClient {
                     Ok((status::OPEN_DATA_CONNECTION,_)) => stream,
                     other => Err(to_error(other))
                 }
-            },
+            }
             other => Err(to_error(other))
         }
     }
@@ -225,7 +233,6 @@ impl FtpClient {
     }
 
     fn write_command(&mut self, cmd: FtpCommand) -> Result<(), IoError> {
-        //println!("sending command: {:?}", cmd);
         let mut stream = self.cmd_stream.get_mut();
         try!(stream.write(cmd.to_string().as_bytes()));
         try!(stream.flush());

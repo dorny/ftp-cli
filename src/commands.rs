@@ -13,7 +13,13 @@ pub enum FtpCommand<'a> {
     RETR(&'a str),
     RMD(&'a str),
     STOR(&'a str),
+    TYPE(FtpTransferType),
     USER(&'a str),
+}
+
+pub enum FtpTransferType {
+    Text,       // ASCII
+    Binary,     // IMAGE
 }
 
 impl<'a> ToString for FtpCommand<'a> {
@@ -35,6 +41,8 @@ impl<'a> ToString for FtpCommand<'a> {
             FtpCommand::RETR(ref path) => format!("RETR {}\n", path),
             FtpCommand::RMD(ref path) => format!("RMD {}\n", path),
             FtpCommand::STOR(ref path) => format!("STOR {}\n", path),
+            FtpCommand::TYPE(FtpTransferType::Text) => "TYPE A\n".to_string(),
+            FtpCommand::TYPE(FtpTransferType::Binary) => "TYPE I\n".to_string(),
             FtpCommand::USER(ref user) => format!("USER {}\n", user),
         }
     }

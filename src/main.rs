@@ -166,7 +166,7 @@ fn command_loop(client: &mut FtpClient) {
                         Ok(_) => println!("File download complete."),
                         Err(e) => print_err(e)
                     }
-                },
+                }
 
                 "mkdir" => print_if_error(client.mkdir(args)),
 
@@ -177,7 +177,7 @@ fn command_loop(client: &mut FtpClient) {
                         Ok(_) => println!("File upload complete."),
                         Err(e) => print_err(e)
                     }
-                },
+                }
 
                 "pwd" => print_result(client.pwd()),
 
@@ -187,7 +187,8 @@ fn command_loop(client: &mut FtpClient) {
 
                 "q" => return,
 
-                "" => {},
+                "" => { }
+
                 _ => println!("Unknown command.")
             }
         }
@@ -198,7 +199,7 @@ fn command_loop(client: &mut FtpClient) {
 
 fn print_if_error(result: Result<(), FtpError>) {
     match result {
-        Ok(()) => {},
+        Ok(()) => { }
         Err(e) => println!("{}", e)
     }
 }
