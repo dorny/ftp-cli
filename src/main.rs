@@ -73,6 +73,7 @@ fn main() {
             login(&mut client, &settings);
             set_tranfer_mode(&mut client, &settings);
             command_loop(&mut client);
+            client.quit();
         }
         Err(err) => print_err(err)
     }

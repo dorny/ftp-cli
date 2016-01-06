@@ -15,7 +15,7 @@ impl<R: Read> BufferedTransfer for R {
         while !done {
             let n = try!(self.read(&mut buf));
             if n > 0 {
-                try!(ostream.write_all(&buf))
+                try!(ostream.write_all(&buf[..n]))
             }
             else {
                 done = true;

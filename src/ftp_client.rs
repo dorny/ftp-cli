@@ -86,6 +86,7 @@ impl FtpClient {
         let mut stream = try!(self.init_data_transfer(cmd));
         let mut file = try!(File::create(local_path));
         try!(stream.write_all_to(&mut file));
+        try!(self.end_data_transfer());
         Ok(())
     }
 
@@ -102,8 +103,10 @@ impl FtpClient {
     pub fn list(&mut self, path: &str) -> Result<String, FtpError> {
         let cmd = FtpCommand::LIST(path);
         let mut stream = try!(self.init_data_transfer(cmd));
-        let data = try!(self.receive_data(&mut stream));
-        let text = try!(String::from_utf8(data));
+        let mut buf :Vec<u8> = Vec::new();
+        try!(stream.read_to_end(&mut buf));
+        let text = try!(String::from_utf8(buf));
+        try!(self.end_data_transfer());
         Ok(text)
     }
 
@@ -113,6 +116,7 @@ impl FtpClient {
         let mut stream = try!(self.init_data_transfer(cmd));
         let mut file = try!(File::open(local_path));
         try!(file.write_all_to(&mut stream));
+        try!(self.end_data_transfer());
         Ok(())
     }
 
@@ -123,6 +127,13 @@ impl FtpClient {
         match self.read_response() {
             Ok((status::PATHNAME_CREATED, path)) => Ok(path[1..path.len()-1].to_string()),
             other => Err(to_error(other))
+        }
+    }
+
+    pub fn quit(mut self) {
+        let cmd = FtpCommand::QUIT;
+        match self.write_command(cmd) {
+            _ => { /* ignore any error here */ }
         }
     }
 
@@ -206,21 +217,19 @@ impl FtpClient {
         }
     }
 
+    fn end_data_transfer(&mut self) -> Result<(), FtpError> {
+        match self.read_response() {
+            Ok((status::CLOSING_DATA_CONNECTION,_)) => Ok(()),
+            other => Err(to_error(other))
+        }
+    }
+
     fn write_command(&mut self, cmd: FtpCommand) -> Result<(), IoError> {
         //println!("sending command: {:?}", cmd);
         let mut stream = self.cmd_stream.get_mut();
         try!(stream.write(cmd.to_string().as_bytes()));
         try!(stream.flush());
         Ok(())
-    }
-
-    fn receive_data(&mut self, stream: &mut TcpStream) -> Result<Vec<u8>, FtpError> {
-        let mut buf :Vec<u8> = Vec::new();
-        try!(stream.read_to_end(&mut buf));
-        match self.read_response() {
-            Ok((status::CLOSING_DATA_CONNECTION,_)) => Ok(buf),
-            other => Err(to_error(other))
-        }
     }
 }
 

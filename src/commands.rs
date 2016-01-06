@@ -9,6 +9,7 @@ pub enum FtpCommand<'a> {
     PASV,
     PORT(SocketAddrV4),
     PWD,
+    QUIT,
     RETR(&'a str),
     RMD(&'a str),
     STOR(&'a str),
@@ -30,6 +31,7 @@ impl<'a> ToString for FtpCommand<'a> {
                 format!("PORT {},{},{},{},{},{}\n", ip[0], ip[1], ip[2], ip[3], port/256, port%256)
             }
             FtpCommand::PWD => format!("PWD\n"),
+            FtpCommand::QUIT => format!("QUIT\n"),
             FtpCommand::RETR(ref path) => format!("RETR {}\n", path),
             FtpCommand::RMD(ref path) => format!("RMD {}\n", path),
             FtpCommand::STOR(ref path) => format!("STOR {}\n", path),
