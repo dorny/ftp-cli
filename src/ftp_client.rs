@@ -183,7 +183,6 @@ impl FtpClient {
         }
     }
 
-    /// Init data transfer for active mode
     fn init_data_transfer_active(&mut self, command: FtpCommand, addr: SocketAddrV4) -> Result<TcpStream, FtpError> {
         let listener = try!(TcpListener::bind(addr));
         try!(self.write_command(FtpCommand::PORT(addr)));
@@ -202,7 +201,6 @@ impl FtpClient {
         }
     }
 
-    /// Init data transfer for passive mode
     fn init_data_transfer_passive(&mut self, command: FtpCommand) -> Result<TcpStream, FtpError> {
         try!(self.write_command(FtpCommand::PASV));
         match self.read_response() {
@@ -215,9 +213,9 @@ impl FtpClient {
                 let port = to_ftp_port(nums[4] as u16, nums[5] as u16);
                 let addr = SocketAddrV4::new(ip,port);
                 try!(self.write_command(command));
-                let stream = TcpStream::connect(addr).map_err(|e| FtpError::IoError(e));
+                let stream = try!(TcpStream::connect(addr));
                 match self.read_response() {
-                    Ok((status::OPEN_DATA_CONNECTION,_)) => stream,
+                    Ok((status::OPEN_DATA_CONNECTION,_)) => Ok(stream),
                     other => Err(to_error(other))
                 }
             }
