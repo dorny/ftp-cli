@@ -47,6 +47,8 @@ fn main() {
         ap.add_option(&["--version"],
             Print(env!("CARGO_PKG_VERSION").to_string()), "Show version");
 
+        ap.add_option(&["--list-commands"], Print(COMMANDS_HELP.to_string()), "List supported commands");
+
         ap.refer(&mut settings.host)
             .add_argument("host",Store, "Server hostname");
 
@@ -185,7 +187,7 @@ fn command_loop(client: &mut FtpClient) {
 
                 "rmdir" => print_if_error(client.rmdir(args)),
 
-                "q" => return,
+                "q" | "quit" => return,
 
                 "" => { }
 
@@ -215,3 +217,17 @@ fn print_result(result: Result<String, FtpError>) {
 fn print_err(error: FtpError) {
     println!("{}", error);
 }
+
+
+const COMMANDS_HELP: &'static str =
+"Commands:
+  cd PATH         - Change working directory
+  get PATH        - Download file
+  mkdir PATH      - Make directory
+  ls [PATH]       - List directory or file
+  put PATH        - Upload file
+  pwd             - Print working directory (on server)
+  rm PATH         - Remove file
+  rmdir PATH      - Remove directory
+  q | quit        - Quit
+";
