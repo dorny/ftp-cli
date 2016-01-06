@@ -1,11 +1,15 @@
 use std::fmt::{Display, Formatter};
 use std::error::Error;
+use std::convert::From;
+use std::io;
+use std::string::FromUtf8Error;
 
 #[derive(Debug)]
 pub enum FtpError {
     InvalidResponse(String),
     UnexpectedReturnCode(i32, String),
-    IoError(::std::io::Error)
+    IoError(io::Error),
+    EncodingError(FromUtf8Error)
 }
 
 impl Error for FtpError {
@@ -15,6 +19,7 @@ impl Error for FtpError {
             FtpError::InvalidResponse(_) => "Server response is in invalid format",
             FtpError::UnexpectedReturnCode(_,_) => "Received unexpected return code.",
             FtpError::IoError(_) => "Comunication IO error",
+            FtpError::EncodingError(_) => "Received text has invalid encoding."
         }
     }
 
@@ -32,12 +37,19 @@ impl Display for FtpError {
             FtpError::InvalidResponse(ref line) => write!(f, "Server response is in invalid format. Received line: \"{}\".", line),
             FtpError::UnexpectedReturnCode(ref code, ref descr) => write!(f, "Received unexpected return code {}. Description \"{}\".", code, descr),
             FtpError::IoError(ref err) => write!(f, "Comunication error: {}.", err),
+            FtpError::EncodingError(ref err) => write!(f, "Received text has invalid encoding. Error: \"{}\".", err)
         }
     }
 }
 
-impl ::std::convert::From<::std::io::Error> for FtpError {
-    fn from(err: ::std::io::Error) -> Self {
+impl From<io::Error> for FtpError {
+    fn from(err: io::Error) -> Self {
         FtpError::IoError(err)
+    }
+}
+
+impl From<FromUtf8Error> for FtpError {
+    fn from(err: FromUtf8Error) -> Self {
+        FtpError::EncodingError(err)
     }
 }

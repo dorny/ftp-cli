@@ -3,11 +3,15 @@ extern crate rpassword;
 
 mod error;
 mod ftp_client;
+mod stream;
+mod commands;
 
 use std::io::Write;
+use std::net::SocketAddr;
+use std::str::FromStr;
 use ftp_client::{FtpClient, FtpMode};
 use error::FtpError;
-use argparse::{ArgumentParser, Store, StoreOption, StoreConst};
+use argparse::{ArgumentParser, Print, Store, StoreOption};
 use rpassword::read_password;
 
 
@@ -17,7 +21,7 @@ struct Settings {
     port: String,
     user: Option<String>,
     password: Option<String>,
-    mode: FtpMode,
+    listen: Option<String>,
 }
 
 impl Settings {
@@ -27,7 +31,7 @@ impl Settings {
             port: "21".to_string(),
             user: None,
             password: None,
-            mode: FtpMode::Active,
+            listen: None,
         }
     }
 }
@@ -39,6 +43,9 @@ fn main() {
     {
         let mut ap = ArgumentParser::new();
         ap.set_description("Primitive FTP client written in rust.");
+
+        ap.add_option(&["--version"],
+            Print(env!("CARGO_PKG_VERSION").to_string()), "Show version");
 
         ap.refer(&mut settings.host)
             .add_argument("host",Store, "Server hostname");
@@ -52,36 +59,36 @@ fn main() {
         ap.refer(&mut settings.password)
             .add_option(&["-p", "--password"], StoreOption, "Passwrod");
 
-        ap.refer(&mut settings.mode)
-            .add_option(&["-P", "--pasive"], StoreConst(FtpMode::Passive), "Use passive mode for data transfers");
+        ap.refer(&mut settings.listen)
+            .add_option(&["--active"], StoreOption, "Use active mode and listen on provided address for data transfers");
 
         ap.parse_args_or_exit();
     }
 
     let server = format!("{}:{}",settings.host, settings.port);
 
-    match FtpClient::connect(server.as_ref()) {
+    match FtpClient::connect(&server) {
         Ok(mut client) => {
             println!("Connected to server");
-            login(&mut client, &mut settings);
-            client.set_mode(settings.mode);
+            login(&mut client, &settings);
+            set_tranfer_mode(&mut client, &settings);
             command_loop(&mut client);
         }
         Err(err) => print_err(err)
     }
 }
 
-fn login(client: &mut FtpClient, settings: &mut Settings) {
+fn login(client: &mut FtpClient, settings: &Settings) {
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     let mut is_logged: bool = false;
+    let os_user = std::env::var("USER").unwrap_or(String::new());
 
     while !is_logged {
 
         let user = match settings.user {
             Some(ref usr) => usr.to_string(),
             None => {
-                let os_user = std::env::var("USER").unwrap_or(String::new());
                 print!("User ({}): ", os_user);
                 stdout.flush().unwrap();
                 let mut line = String::new();
@@ -89,7 +96,7 @@ fn login(client: &mut FtpClient, settings: &mut Settings) {
                     Err(_) => return,
                     Ok(_) => {
                         match line.trim().is_empty() {
-                            true => os_user,
+                            true => os_user.to_string(),
                             false => line.trim().to_string()
                         }
                     }
@@ -109,7 +116,7 @@ fn login(client: &mut FtpClient, settings: &mut Settings) {
             }
         };
 
-        match client.login(user.as_ref(), password.as_ref()) {
+        match client.login(&user, &password) {
             Ok(true) => {
                 println!("Successfuly logged in.");
                 is_logged = true;
@@ -126,6 +133,16 @@ fn login(client: &mut FtpClient, settings: &mut Settings) {
     }
 }
 
+fn set_tranfer_mode(client: &mut FtpClient, settings: &Settings) {
+    if let Some(ref text) = settings.listen {
+        match SocketAddr::from_str(text) {
+            Ok(SocketAddr::V4(addr)) => client.set_mode(FtpMode::Active(addr)),
+            Ok(SocketAddr::V6(_)) => println!("IPv6 for active mode is not supported. Using default passive mode."),
+            Err(e) => println!("Invalid listen address format: {}", e)
+        }
+    }
+}
+
 fn command_loop(client: &mut FtpClient) {
     let stdin = std::io::stdin();
     let mut buf = String::new();
@@ -135,32 +152,38 @@ fn command_loop(client: &mut FtpClient) {
         {
             let line = buf.trim();
             let (cmd,args) = match line.find(' ') {
-                Some(pos) => (line[0..pos].as_ref(), line[pos+1..].as_ref()),
+                Some(pos) => (&line[0..pos], &line[pos+1..]),
                 None => (line, "".as_ref())
             };
 
             match cmd {
                 "ls" => print_result(client.list(args)),
+
                 "cd" => {
                     match client.cd(args) {
                         Ok(_) => {},
                         Err(e) => print_err(e)
                     }
-                }
+                },
+
                 "pwd" => print_result(client.pwd()),
+
                 "get" => {
                     match client.get(args,args) {
                         Ok(_) => println!("File download complete."),
                         Err(e) => print_err(e)
                     }
                 },
+
                 "put" => {
                     match client.put(args,args) {
                         Ok(_) => println!("File upload complete."),
                         Err(e) => print_err(e)
                     }
                 },
+
                 "q" => return,
+
                 "" => {},
                 _ => println!("Unknown command.")
             }
