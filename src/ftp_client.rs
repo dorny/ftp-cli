@@ -61,15 +61,6 @@ impl FtpClient {
         }
     }
 
-    /// List remote directory.
-    pub fn list(&mut self, path: &str) -> Result<String, FtpError> {
-        let cmd = FtpCommand::LIST(path);
-        let mut stream = try!(self.init_data_transfer(cmd));
-        let data = try!(self.receive_data(&mut stream));
-        let text = try!(String::from_utf8(data));
-        Ok(text)
-    }
-
     /// Change remote directory.
     pub fn cd(&mut self, path: &str) -> Result<(), FtpError> {
         let cmd = FtpCommand::CWD(path);
@@ -80,31 +71,68 @@ impl FtpClient {
         }
     }
 
+    pub fn delete (&mut self, path: &str) -> Result<(), FtpError> {
+        let cmd = FtpCommand::DELE(path);
+        try!(self.write_command(cmd));
+        match self.read_response() {
+            Ok((status::FILE_ACTION_OK, _)) => Ok(()),
+            other => Err(to_error(other))
+        }
+    }
+
+    /// Download remote file to current local directory.
+    pub fn get(&mut self, remote_path: &str, local_path: &str) -> Result<(), FtpError> {
+        let cmd = FtpCommand::RETR(remote_path);
+        let mut stream = try!(self.init_data_transfer(cmd));
+        let mut file = try!(File::create(local_path));
+        try!(stream.write_all_to(&mut file));
+        Ok(())
+    }
+
+    pub fn mkdir(&mut self, path: &str) -> Result<(), FtpError> {
+        let cmd = FtpCommand::MKD(path);
+        try!(self.write_command(cmd));
+        match self.read_response() {
+            Ok((status::PATHNAME_CREATED, _)) => Ok(()),
+            other => Err(to_error(other))
+        }
+    }
+
+    /// List remote directory.
+    pub fn list(&mut self, path: &str) -> Result<String, FtpError> {
+        let cmd = FtpCommand::LIST(path);
+        let mut stream = try!(self.init_data_transfer(cmd));
+        let data = try!(self.receive_data(&mut stream));
+        let text = try!(String::from_utf8(data));
+        Ok(text)
+    }
+
+    /// Upload local file to server current directory.
+    pub fn put(&mut self, local_path: &str, remote_path: &str) -> Result<(), FtpError> {
+        let cmd = FtpCommand::STOR(remote_path);
+        let mut stream = try!(self.init_data_transfer(cmd));
+        let mut file = try!(File::open(local_path));
+        try!(file.write_all_to(&mut stream));
+        Ok(())
+    }
+
     /// Get current working directory.
     pub fn pwd(&mut self) -> Result<String, FtpError> {
-        try!(self.write_command(FtpCommand::PWD));
+        let cmd = FtpCommand::PWD;
+        try!(self.write_command(cmd));
         match self.read_response() {
             Ok((status::PATHNAME_CREATED, path)) => Ok(path[1..path.len()-1].to_string()),
             other => Err(to_error(other))
         }
     }
 
-    /// Download remote file to current local directory.
-    pub fn get(&mut self, remote_filename: &str, local_filename: &str) -> Result<(), FtpError> {
-        let cmd = FtpCommand::RETR(remote_filename);
-        let mut stream = try!(self.init_data_transfer(cmd));
-        let mut file = try!(File::create(local_filename));
-        try!(stream.write_all_to(&mut file));
-        Ok(())
-    }
-
-    /// Upload local file to server current directory.
-    pub fn put(&mut self, local_filename: &str, remote_filename: &str) -> Result<(), FtpError> {
-        let cmd = FtpCommand::STOR(remote_filename);
-        let mut stream = try!(self.init_data_transfer(cmd));
-        let mut file = try!(File::open(local_filename));
-        try!(file.write_all_to(&mut stream));
-        Ok(())
+    pub fn rmdir(&mut self, path: &str) -> Result<(), FtpError> {
+        let cmd = FtpCommand::RMD(path);
+        try!(self.write_command(cmd));
+        match self.read_response() {
+            Ok((status::FILE_ACTION_OK, _)) => Ok(()),
+            other => Err(to_error(other))
+        }
     }
 
     /// Read response code and text (rest of a line)
@@ -198,6 +226,7 @@ impl FtpClient {
 
 fn to_error(result: Result<(i32,String),FtpError>) -> FtpError {
     match result {
+        Ok((status::OPERATION_FAILED, text)) => FtpError::OperationFailed(text),
         Ok((code,text)) => FtpError::UnexpectedReturnCode(code, text),
         Err(err) => err
     }
@@ -221,4 +250,5 @@ mod status {
     pub const USERNAME_OK_NEED_PASSWORD : i32 = 331;
     pub const INVALID_USERNAME_OR_PASSWORD : i32 = 430;
     pub const NOT_LOGGED_IN : i32 = 530;
+    pub const OPERATION_FAILED : i32 = 550;
 }

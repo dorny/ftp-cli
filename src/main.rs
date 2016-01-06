@@ -157,16 +157,8 @@ fn command_loop(client: &mut FtpClient) {
             };
 
             match cmd {
-                "ls" => print_result(client.list(args)),
 
-                "cd" => {
-                    match client.cd(args) {
-                        Ok(_) => {},
-                        Err(e) => print_err(e)
-                    }
-                },
-
-                "pwd" => print_result(client.pwd()),
+                "cd" => print_if_error(client.cd(args)),
 
                 "get" => {
                     match client.get(args,args) {
@@ -175,12 +167,22 @@ fn command_loop(client: &mut FtpClient) {
                     }
                 },
 
+                "mkdir" => print_if_error(client.mkdir(args)),
+
+                "ls" => print_result(client.list(args)),
+
                 "put" => {
                     match client.put(args,args) {
                         Ok(_) => println!("File upload complete."),
                         Err(e) => print_err(e)
                     }
                 },
+
+                "pwd" => print_result(client.pwd()),
+
+                "rm" => print_if_error(client.delete(args)),
+
+                "rmdir" => print_if_error(client.rmdir(args)),
 
                 "q" => return,
 
@@ -190,6 +192,13 @@ fn command_loop(client: &mut FtpClient) {
         }
 
         buf.clear();
+    }
+}
+
+fn print_if_error(result: Result<(), FtpError>) {
+    match result {
+        Ok(()) => {},
+        Err(e) => println!("{}", e)
     }
 }
 
