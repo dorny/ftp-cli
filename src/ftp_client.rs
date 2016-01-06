@@ -115,9 +115,11 @@ impl FtpClient {
     /// Upload local file to server current directory.
     pub fn put(&mut self, local_path: &str, remote_path: &str) -> Result<(), FtpError> {
         let cmd = FtpCommand::STOR(remote_path);
-        let mut stream = try!(self.init_data_transfer(cmd, FtpTransferType::Binary));
-        let mut file = try!(File::open(local_path));
-        try!(file.write_all_to(&mut stream));
+        {
+            let mut stream = try!(self.init_data_transfer(cmd, FtpTransferType::Binary));
+            let mut file = try!(File::open(local_path));
+            try!(file.write_all_to(&mut stream));
+        }
         try!(self.end_data_transfer());
         Ok(())
     }
